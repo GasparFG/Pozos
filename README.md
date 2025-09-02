@@ -106,8 +106,3 @@ https://tuapp.streamlit.app
 [LinkedIn](https://www.linkedin.com/) | [Portafolio](https://tusitio.com)
 
 ---
-
-```
-
-¿Quieres que también te arme un `README.md` **versión reducida** (solo descripción breve + cómo correr la app) para usar cuando sea demo público y no quieras dar tantos detalles técnicos?
-```
