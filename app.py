@@ -3,6 +3,7 @@ import pandas as pd
 import altair as alt
 import numpy as np
 import calendar
+import re
 
 st.set_page_config(page_title="Producción | Vista rápida", layout="wide")
 
@@ -14,21 +15,6 @@ if "df" not in st.session_state:
 
 st.title("Carga de Excel y vista rápida")
 uploaded_file = st.file_uploader("Sube tu archivo Excel", type=["xlsx", "xls"])
-
-def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    cols_low = {c.lower(): c for c in df.columns}
-    rename_map = {}
-    for key in ["date", "fecha", "fechas", "Fecha"]:
-        if key in cols_low: rename_map[cols_low[key]] = "date"; break
-    for key in ["well", "pozo", "wells", "pozos", "Nombre_del_pozo"]:
-        if key in cols_low: rename_map[cols_low[key]] = "well"; break
-    for key in ["oil bbl", "oil", "petróleo", "petroleo", "Petróleo_(Mbd)"]:
-        if key in cols_low: rename_map[cols_low[key]] = "Oil"; break
-    for key in ["water bbl", "water", "agua", "Agua_(Mbd)"]:
-        if key in cols_low: rename_map[cols_low[key]] = "Water"; break
-    for key in ["gas mcf", "gas", "Gas_asociado_(MMpcd)"]:
-        if key in cols_low: rename_map[cols_low[key]] = "Gas"; break
-    return df.rename(columns=rename_map)
 
 def _to_datetime_safe(s: pd.Series):
     dt = pd.to_datetime(s, errors="coerce", dayfirst=True, infer_datetime_format=True)
@@ -93,18 +79,93 @@ def calcular_metricas(df, var, unidad_q, unidad_v, include_qoi=False):
     return pd.DataFrame(metricas, columns=["Métrica", "Valor", "Unidad"])
 
 # Paso 1: subir archivo
+
+# --- DETECCIÓN AUTOMÁTICA + CONFIRMACIÓN ---
+def detectar_columnas(df):
+    """Detecta columnas equivalentes a las esperadas usando heurísticas."""
+    cols = df.columns
+    mapeo = {"date": None, "well": None, "Oil": None, "Gas": None, "Water": None}
+    patterns = {
+        "date": [r"fecha", r"date", r"periodo", r"period"],
+        "well": [r"pozo", r"well", r"nombre[_\s]?pozo"],
+        "Oil": [r"petrol", r"oil", r"crudo", r"mbd", r"líquido", r"liquid"],
+        "Gas": [r"gas"],
+        "Water": [r"agua", r"water"]
+    }
+
+    def puntuar(nombre, patrones):
+        nombre_low = nombre.lower()
+        puntaje = 0
+        for p in patrones:
+            if re.search(p, nombre_low):
+                puntaje += len(p)  # más largo = más específico
+        # penalizar términos genéricos
+        if "hidrocarb" in nombre_low or "total" in nombre_low:
+            puntaje -= 3
+        return puntaje
+
+    for campo, patrones in patterns.items():
+        mejor_col, mejor_score = None, 0
+        for col in cols:
+            score = puntuar(col, patrones)
+            if score > mejor_score:
+                mejor_col, mejor_score = col, score
+        mapeo[campo] = mejor_col
+    return mapeo
+
+def confirmar_mapeo(df, mapeo):
+    st.subheader("Confirmar columnas detectadas")
+    opciones = [None] + df.columns.tolist()
+    nuevo_mapeo = {}
+    for campo, col_detectada in mapeo.items():
+        nuevo_mapeo[campo] = st.selectbox(
+            f"Columna para **{campo}**",
+            options=opciones,
+            index=opciones.index(col_detectada) if col_detectada in opciones else 0,
+            key=f"sel_{campo}"
+        )
+    if st.button("Confirmar columnas"):
+        st.session_state["mapeo_final"] = nuevo_mapeo
+        st.session_state["mapeo_confirmado"] = True
+        st.rerun()
+
+def aplicar_mapeo(df, mapeo_final):
+    rename_map = {v: k for k, v in mapeo_final.items() if v}
+    return df.rename(columns=rename_map)
+
+def _to_datetime_safe(s: pd.Series):
+    dt = pd.to_datetime(s, errors="coerce", dayfirst=True, infer_datetime_format=True)
+    return dt.mask(~dt.dt.year.between(1900, 2100))
+
+# --- Flujo ---
 if uploaded_file is not None and not st.session_state.confirmed:
     df_raw = pd.read_excel(uploaded_file)
-    df = _normalize_columns(df_raw.copy())
-    df["date"] = _to_datetime_safe(df["date"])
-    df = df.dropna(subset=["date"]).sort_values("date")
-    st.session_state.df = df
+    st.session_state.df_raw = df_raw
     st.subheader("Vista previa (primeras 5 filas)")
-    st.dataframe(df.head(5))
-    st.info("Verifica columnas: 'date', 'well', 'Oil', 'Water', 'Gas'.")
-    if st.button("Confirmar y ver gráficas"):
-        st.session_state.confirmed = True
-        st.rerun()
+    st.dataframe(df_raw.head())
+
+    if "mapeo_confirmado" not in st.session_state:
+        mapeo_auto = detectar_columnas(df_raw)
+        confirmar_mapeo(df_raw, mapeo_auto)
+        st.stop()
+
+    # Si ya se confirmó el mapeo:
+    mapeo_final = st.session_state["mapeo_final"]
+    df = aplicar_mapeo(st.session_state.df_raw, mapeo_final)
+    if "date" in df.columns:
+        df["date"] = _to_datetime_safe(df["date"])
+        df = df.dropna(subset=["date"]).sort_values("date")
+
+    st.session_state.df = df
+    st.session_state.confirmed = True
+    st.success("Columnas confirmadas y datos preparados. Ahora puedes ver las gráficas.")
+    st.rerun()
+
+# --- Aquí continúa tu lógica original (preparar_mensual, calcular_metricas, etc.) ---
+if st.session_state.confirmed:
+    st.dataframe(st.session_state.df.head())
+    st.info("Datos listos. Continúa con el análisis y visualización.")
+
 
 # Paso 2: análisis
 if st.session_state.confirmed:
