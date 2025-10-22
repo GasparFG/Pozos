@@ -26,7 +26,7 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
         if key in cols_low: rename_map[cols_low[key]] = "Oil"; break
     for key in ["water bbl", "water", "agua", "Agua_(Mbd)"]:
         if key in cols_low: rename_map[cols_low[key]] = "Water"; break
-    for key in ["gas mcf", "gas", "Gas_asociado_(MMpcd)]:
+    for key in ["gas mcf", "gas", "Gas_asociado_(MMpcd)"]:
         if key in cols_low: rename_map[cols_low[key]] = "Gas"; break
     return df.rename(columns=rename_map)
 
