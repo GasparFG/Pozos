@@ -18,15 +18,15 @@ uploaded_file = st.file_uploader("Sube tu archivo Excel", type=["xlsx", "xls"])
 def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     cols_low = {c.lower(): c for c in df.columns}
     rename_map = {}
-    for key in ["date", "fecha", "fechas"]:
+    for key in ["date", "fecha", "fechas", "Fecha"]:
         if key in cols_low: rename_map[cols_low[key]] = "date"; break
-    for key in ["well", "pozo", "wells", "pozos"]:
+    for key in ["well", "pozo", "wells", "pozos", "Nombre_del_pozo"]:
         if key in cols_low: rename_map[cols_low[key]] = "well"; break
-    for key in ["oil bbl", "oil", "petróleo", "petroleo"]:
+    for key in ["oil bbl", "oil", "petróleo", "petroleo", "Petróleo_(Mbd)"]:
         if key in cols_low: rename_map[cols_low[key]] = "Oil"; break
-    for key in ["water bbl", "water", "agua"]:
+    for key in ["water bbl", "water", "agua", "Agua_(Mbd)"]:
         if key in cols_low: rename_map[cols_low[key]] = "Water"; break
-    for key in ["gas mcf", "gas"]:
+    for key in ["gas mcf", "gas", "Gas_asociado_(MMpcd)]:
         if key in cols_low: rename_map[cols_low[key]] = "Gas"; break
     return df.rename(columns=rename_map)
 
